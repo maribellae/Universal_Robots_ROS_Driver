@@ -41,11 +41,12 @@ class UnityPosControl:
     def __init__(self):
 
         ros_node_name = rospy.get_param("/TCP_NODE_NAME", 'TCPServer')
-        tcp_server = TcpServer(ros_node_name)
+
         rospy.init_node(ros_node_name, anonymous=True)
     
     
         #rospy.init_node("test_trajectories")
+        
         self.lastposition = []
         self.pose_np =[]
         self.ur_position=[]
@@ -56,6 +57,7 @@ class UnityPosControl:
 
         ## ROS Subscriber Topic
         # Subscribe to the ar_pose_marker topic to get the image width and height
+
         self.ur_sub_joints = rospy.Subscriber('ur3_joints', URMoveitJoints, self.callback_joints)
         
         ## ROS parameters
