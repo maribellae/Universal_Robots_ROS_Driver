@@ -77,7 +77,9 @@ class UnityPosControl:
             FollowJointTrajectoryAction,
         )
         # Wait for the server to start up and start listening for goals.
+        print("AAAAA")
         trajectory_client.wait_for_server()
+        print("BBBBB")
         #create and fill trajectory the goal
         goal = FollowJointTrajectoryGoal()
         goal.trajectory.joint_names = JOINT_NAMES
