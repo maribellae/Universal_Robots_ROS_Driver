@@ -23,6 +23,6 @@
   <remap from="forward_joint_trajectory" to="/forward_joint_traj_controller/follow_joint_trajectory" />
   <remap from="follow_cartesian_trajectory" to="/pose_based_cartesian_traj_controller/follow_cartesian_trajectory" />
 
-  <test test-name="copying test" pkg="ur_robot_driver" type="unityposcontrol.py" name="copying_test" time-limit="300.0"/>
+  <test test-name="copying test" pkg="ur_robot_driver/test" type="unityposcontrol.py" name="copying_test" time-limit="300.0"/>
 
 </launch>
