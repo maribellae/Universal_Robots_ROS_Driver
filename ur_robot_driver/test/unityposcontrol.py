@@ -28,6 +28,10 @@ JOINT_TRAJECTORY_CONTROLLERS = [
     "pos_joint_traj_controller", # for the sim-robot
 
 ]
+
+PKG = 'ur_robot_driver'
+NAME = 'unityposcontrol'
+
 class UnityPosControl:
     """ This is test the joint robot trajectories in simulation and real robot"""
     
