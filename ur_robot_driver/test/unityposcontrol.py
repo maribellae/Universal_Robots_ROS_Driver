@@ -4,6 +4,10 @@ import time
 
 
 import rospy
+from ros_tcp_endpoint import TcpServer, RosPublisher, RosSubscriber, RosService
+from ur3_moveit.msg import *
+from ur3_moveit.srv import *
+
 import actionlib
 import std_msgs.msg
 from control_msgs.msg import (
@@ -29,15 +33,19 @@ JOINT_TRAJECTORY_CONTROLLERS = [
 
 ]
 
-PKG = 'ur_robot_driver'
-NAME = 'unityposcontrol'
+
 
 class UnityPosControl:
     """ This is test the joint robot trajectories in simulation and real robot"""
     
     def __init__(self):
 
-        rospy.init_node("test_trajectories")
+        ros_node_name = rospy.get_param("/TCP_NODE_NAME", 'TCPServer')
+        tcp_server = TcpServer(ros_node_name)
+        rospy.init_node(ros_node_name, anonymous=True)
+    
+    
+        #rospy.init_node("test_trajectories")
         self.lastposition = []
         self.pose_np =[]
         self.ur_position=[]
