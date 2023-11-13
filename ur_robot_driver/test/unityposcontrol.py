@@ -40,12 +40,9 @@ class UnityPosControl:
     
     def __init__(self):
 
-        ros_node_name = rospy.get_param("/TCP_NODE_NAME", 'TCPServer')
-
-        rospy.init_node(ros_node_name, anonymous=True)
     
     
-        #rospy.init_node("test_trajectories")
+        rospy.init_node("test_trajectories")
         
         self.lastposition = []
         self.pose_np =[]
@@ -68,6 +65,7 @@ class UnityPosControl:
     def callback_joints(self, msg):
         ## Try to get the joint states msg from Unity
         self.ur_position = msg.joints
+        print(self.ur_position)
         self.send_joint_trajectory() 
    
     
