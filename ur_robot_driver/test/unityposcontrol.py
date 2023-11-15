@@ -42,7 +42,7 @@ class UnityPosControl:
 
     
     
-        rospy.init_node("test_trajectories")
+        rospy.init_node("ur3_joints")
         
         self.lastposition = []
         self.pose_np =[]
@@ -106,6 +106,7 @@ class UnityPosControl:
         rospy.signal_shutdown("We are done here!")
 
 if __name__ == '__main__':
+    
     try:
         client = UnityPosControl()
         client.Position_control()
