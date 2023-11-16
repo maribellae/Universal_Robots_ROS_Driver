@@ -64,7 +64,7 @@ class UnityPosControl:
 
     def callback_joints(self, msg):
         ## Try to get the joint states msg from Unity
-        self.ur_position = msg.joints
+        self.ur_position = [msg.joint_00, msg.joint_01,msg.joint_02,msg.joint_03,msg.joint_04, msg.joint_05]
         print(self.ur_position)
         self.send_joint_trajectory() 
    
