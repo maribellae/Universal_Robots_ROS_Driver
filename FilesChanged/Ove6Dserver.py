@@ -185,7 +185,7 @@ def pose_estimation_main(req):
     print("Finished estimation pipeline\n")
     return response
   
-def running(obj_id):
+def running(req):
   
   view_id = 0
   
@@ -193,7 +193,7 @@ def running(obj_id):
   
   depth_file, color_file,aligned_depth_frame,color_frame = cam.get_image()
 
-  est_rotation, est_position =  PredictOne( obj_id, view_id, color_file, np.array(depth_file,dtype="float16") )
+  est_rotation, est_position =  PredictOne( req.obj_id, view_id, color_file, np.array(depth_file,dtype="float16") )
   response = _format_response(est_position, est_rotation)
 
   return response
