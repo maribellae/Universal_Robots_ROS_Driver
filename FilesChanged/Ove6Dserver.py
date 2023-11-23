@@ -20,10 +20,10 @@ from detectron2.engine import DefaultPredictor
 from os.path import join as pjoin
 from bop_toolkit.bop_toolkit_lib import inout
 warnings.filterwarnings("ignore")
-
+import cam_control
 base_path = os.path.dirname(os.path.abspath("."))
 sys.path.append(base_path)
-
+from scipy.spatial.transform import Rotation
 from lib import rendering, network
 
 from dataset import LineMOD_Dataset
@@ -61,6 +61,7 @@ cfg.ZOOM_DIST_FACTOR = 0.01
 cfg.MODEL_SCALING=1
 
 #########   FOR OVE6D'S CODEBOOKS   #########
+
 cfg.VIEWBOOK_BATCHSIZE = 100 # reduce this if out of GPU memory, 
 codebook_saving_dir = pjoin(base_path, 'OVE6D-pose','evaluation1/object_codebooks',
                             cfg.DATASET_NAME, 
@@ -74,69 +75,54 @@ object_codebooks = utils.OVE6D_codebook_generation(codebook_dir=codebook_saving_
                                                     device=DEVICE)
 
 
-Raw_bb =[]
-Raw_shape=[]
 
-def VisualAllLoop(view_id, color_file,depth_file):
+NODE_NAME = "PoseEstimationNodeOVE6D"
 
+def PredictOne( obj_id, view_id, color_file,depth_file):
 
-    #test_data_dir = datapath / 'MixedAll' / 'test'          # path to the test dataset of BOP
+    t = obj_id
+    obj_renderer = rendering.Renderer(width=cfg.RENDER_WIDTH, height=cfg.RENDER_HEIGHT)
+    scene_id = t+1 # range [1, 15]
 
-    for t in range(7):
-        obj_renderer = rendering.Renderer(width=cfg.RENDER_WIDTH, height=cfg.RENDER_HEIGHT)
-        scene_id = t+1 # range [1, 15]
+    tar_obj_id = scene_id # object id equals the scene id for LM dataset
+    tar_obj_codebook = object_codebooks[tar_obj_id]
 
-        tar_obj_id = scene_id # object id equals the scene id for LM dataset
-        tar_obj_codebook = object_codebooks[tar_obj_id]
-
-        ############## read the camera information ##############
-        '''cam_info_file = pjoin(scene_dir, 'scene_camera.json')
-        with open(cam_info_file, 'r') as cam_f:
-            scene_camera_info = json.load(cam_f)
-        view_cam_info = scene_camera_info[str(view_id)]  # scene camera information        '''
-
-
-        ############## read the depth images and covert it from meter to millimeter ##############
-
-        view_depth = torch.tensor(depth_file, dtype=torch.float32)
-        view_depth *= view_cam_info['depth_scale']
-        #print(view_depth) 
-        view_depth *= cfg.MODEL_SCALING # convert to meter scale from millimeter scale
-        view_camK = torch.tensor(view_cam_info['cam_K'], dtype=torch.float32).view(3, 3)[None, ...] # 1x3x3
-        cam_K = view_camK.to(DEVICE)
-        #print(cam_K)
-        view_depth = view_depth.to(DEVICE)
-
-        ############## read rgb image for object segmentation ##############
-        output = predictor(color_file)
+    view_depth = torch.tensor(depth_file, dtype=torch.float32)
+    view_depth *= view_cam_info['depth_scale']
       
-        rcnn_pred_ids = output["instances"].pred_classes
-        rcnn_pred_masks = output["instances"].pred_masks
-        rcnn_pred_scores = output["instances"].scores
+    view_depth *= cfg.MODEL_SCALING # convert to meter scale from millimeter scale
+    view_camK = torch.tensor(view_cam_info['cam_K'], dtype=torch.float32).view(3, 3)[None, ...] # 1x3x3
+    cam_K = view_camK.to(DEVICE)
+    view_depth = view_depth.to(DEVICE)
 
-        ###################### object segmentation ######################
-
-        tar_rcnn_d = tar_obj_id - 1
-        obj_masks = rcnn_pred_masks # NxHxW
+    output = predictor(color_file)
       
-        obj_depths = view_depth[None, ...] * obj_masks
+    rcnn_pred_ids = output["instances"].pred_classes
+    rcnn_pred_masks = output["instances"].pred_masks
+    rcnn_pred_scores = output["instances"].scores
+
+      
+    tar_rcnn_d = tar_obj_id - 1
+    obj_masks = rcnn_pred_masks # NxHxW
+      
+    obj_depths = view_depth[None, ...] * obj_masks
      
-        tar_obj_depths = obj_depths[tar_rcnn_d==rcnn_pred_ids]
-        tar_obj_masks = rcnn_pred_masks[tar_rcnn_d==rcnn_pred_ids]
-        tar_obj_scores = rcnn_pred_scores[tar_rcnn_d==rcnn_pred_ids]
+    tar_obj_depths = obj_depths[tar_rcnn_d==rcnn_pred_ids]
+    tar_obj_masks = rcnn_pred_masks[tar_rcnn_d==rcnn_pred_ids]
+    tar_obj_scores = rcnn_pred_scores[tar_rcnn_d==rcnn_pred_ids]
         
-        mask_pixel_count = tar_obj_masks.view(tar_obj_masks.size(0), -1).sum(dim=1)
+    mask_pixel_count = tar_obj_masks.view(tar_obj_masks.size(0), -1).sum(dim=1)
   
-        valid_idx = (mask_pixel_count >= 100)                                              #?
-        if valid_idx.sum() == 0:
-            mask_visib_ratio = mask_pixel_count / mask_pixel_count.max()
-            valid_idx = mask_visib_ratio >= 0.05
+    valid_idx = (mask_pixel_count >= 100)                                              #?
+    if valid_idx.sum() == 0:
+        mask_visib_ratio = mask_pixel_count / mask_pixel_count.max()
+        valid_idx = mask_visib_ratio >= 0.05
 
-        tar_obj_masks = tar_obj_masks[valid_idx] # select the target object instance masks
-        tar_obj_depths = tar_obj_depths[valid_idx]
-        tar_obj_scores = tar_obj_scores[valid_idx]
+    tar_obj_masks = tar_obj_masks[valid_idx] # select the target object instance masks
+    tar_obj_depths = tar_obj_depths[valid_idx]
+    tar_obj_scores = tar_obj_scores[valid_idx]
   
-        pose_ret, rcnn_idx = utils.OVE6D_rcnn_full_pose(model_func=model_net, 
+    pose_ret, rcnn_idx = utils.OVE6D_rcnn_full_pose(model_func=model_net, 
                                             obj_depths=tar_obj_depths,
                                             obj_masks=tar_obj_masks,
                                             obj_rcnn_scores=tar_obj_scores,
@@ -147,14 +133,79 @@ def VisualAllLoop(view_id, color_file,depth_file):
                                             obj_renderer=obj_renderer, 
                                             return_rcnn_idx=True
                                             )
-        del obj_renderer
+    del obj_renderer
        
-        raw_pose_R = pose_ret['icp1_R'] # without ICP
-        raw_pose_t = pose_ret['icp1_t'] # without ICP
+    raw_pose_R = pose_ret['icp1_R'] # without ICP
+    raw_pose_t = pose_ret['icp1_t'] # without ICP
 
-        return (raw_pose_R,  raw_pose_t)
-        
+    rot = Rotation.from_euler('xyz', raw_pose_R, degrees=True)
+    rot_quat = rot.as_quat()
+  
+    return (rot_quat,  raw_pose_t)
+
+def _format_response(est_position, est_rotation):
+    """ format the computed estimated position/rotation as a service response
+       Args:
+           est_position (float[]): object estmated x,y,z
+           est_rotation (float[]): object estimated Euler angles
+        Returns:
+           response (PoseEstimationServiceResponse): service response object
+       """
+    position = Point()
+    position.x = est_position[0]
+    position.y = est_position[1]
+    position.z = est_position[2]
+
+    rotation = Quaternion()
+    rotation.x = est_rotation[0]
+    rotation.y = est_rotation[1]
+    rotation.z = est_rotation[2]
+    rotation.w = est_rotation[3]
+    
+    pose = Pose()
+    pose.position = position
+    pose.orientation = rotation
+
+    response = PoseEstimationServiceResponse()    #ОСТАВЛЯЕМ 
+    response.estimated_pose = pose
+    return response
+  
+def pose_estimation_main(req):
+    """  main callback for pose est. service.
+    Args:
+        req (PoseEstimationService msg): service request that contains the image data
+     Returns:
+       response (PoseEstimationServiceResponse): service response object
+    """
+    print("Started estimation pipeline")
+    image_path = _save_image(req)
+    print("Predicting from screenshot " + image_path)
+    est_position, est_rotation = _run_model(image_path)
+    response = _format_response(est_position, est_rotation)
+    print("Finished estimation pipeline\n")
+    return response
+  
+def running(obj_id):
+  
+  view_id = 0
+  
+  cam = cam_control.Camera( size=(640, 480), framerate=15)
+  
+  depth_file, color_file,aligned_depth_frame,color_frame = cam.get_image()
+
+  est_rotation, est_position =  PredictOne( obj_id, view_id, color_file, np.array(depth_file,dtype="float16") )
+  response = _format_response(est_position, est_rotation)
+
+  return response
 
 
+def main():
+    """
+     The function to run the pose estimation service
+     """
+    rospy.init_node(NODE_NAME)
+    s = rospy.Service('pose_ove6d_estimation_service', PoseEstimationServiceOVE6D, running)
+    print("Ready to estimate pose!")
+    rospy.spin()
 
 
