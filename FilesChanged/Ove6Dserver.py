@@ -21,7 +21,8 @@ from os.path import join as pjoin
 from bop_toolkit.bop_toolkit_lib import inout
 warnings.filterwarnings("ignore")
 import cam_control
-base_path = os.path.dirname(os.path.abspath("."))
+#base_path = os.path.dirname(os.path.abspath("."))
+base_path = "C:\Users\afrod\OVE6D-pose"
 sys.path.append(base_path)
 from scipy.spatial.transform import Rotation
 from lib import rendering, network
