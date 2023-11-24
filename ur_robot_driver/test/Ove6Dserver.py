@@ -37,6 +37,12 @@ os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 os.environ['EGL_DEVICE_ID'] = str(gpu_id)
 DEVICE = torch.device('cuda')
+
+datapath = Path(r"C:\Users\afrod\OVE6D-pose\Dataspace_my")
+eval_dataset = LineMOD_Dataset.Dataset(datapath / 'MixedAll')
+
+cfg.RENDER_WIDTH = eval_dataset.cam_width    # the width of rendered images
+cfg.RENDER_HEIGHT = eval_dataset.cam_height  # the height of rendered images
 cfg.HEMI_ONLY = True 
 #########   FOR RCNN   ######### 
 rcnnIdx_to_lmIds_dict = {0:1, 1:2, 2:3, 3:4, 4:5, 5:6, 6:7}
