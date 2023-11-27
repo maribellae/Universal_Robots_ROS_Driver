@@ -88,7 +88,7 @@ class UnityPosControl:
         
         point = JointTrajectoryPoint()
         point.positions = position_list
-        point.time_from_start = rospy.Duration(10)
+        point.time_from_start = rospy.Duration(5)
         goal.trajectory.points.append(point)
 
         rospy.logwarn("Robot begin moving..............")
