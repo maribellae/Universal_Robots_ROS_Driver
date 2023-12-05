@@ -60,7 +60,7 @@ class UnityPosControl:
         ## ROS parameters
         self.rate = rospy.Rate(1) # Hz
         # The main program here
-        schet=0
+        self.schet=0
         self.Position_control()
         
     def callback_joints(self, msg):
@@ -99,13 +99,13 @@ class UnityPosControl:
         result = trajectory_client.get_result()
         rospy.loginfo("Trajectory execution finished in state {}".format(result.error_code))
         
-        if (schet==1):
+        if (self.schet==1):
             print("CLOSE")
             wait(100)
-        if (schet ==2):
+        if (self.schet ==2):
             print("OPEN")
             wait(100) 
-        schet = schet+1   
+        self.schet = self.schet+1   
     ## This is main program:
     def Position_control(self):
         """ Control the robot"""
