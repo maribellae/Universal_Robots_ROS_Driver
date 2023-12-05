@@ -101,10 +101,11 @@ class UnityPosControl:
         
         if (self.schet==1):
             print("CLOSE")
-            wait(100)
+            
+            time.sleep(2.5)
         if (self.schet ==2):
             print("OPEN")
-            wait(100) 
+            time.sleep(2.5)
         self.schet = self.schet+1   
     ## This is main program:
     def Position_control(self):
