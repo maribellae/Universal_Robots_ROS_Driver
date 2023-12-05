@@ -99,11 +99,11 @@ class UnityPosControl:
         result = trajectory_client.get_result()
         rospy.loginfo("Trajectory execution finished in state {}".format(result.error_code))
         
-        if (self.schet==1):
+        if (self.schet==2):
             print("CLOSE")
             
             time.sleep(2.5)
-        if (self.schet ==2):
+        if (self.schet ==3):
             print("OPEN")
             time.sleep(2.5)
         self.schet = self.schet+1   
