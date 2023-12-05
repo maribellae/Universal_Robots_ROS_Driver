@@ -97,7 +97,13 @@ class UnityPosControl:
         trajectory_client.wait_for_result()
         result = trajectory_client.get_result()
         rospy.loginfo("Trajectory execution finished in state {}".format(result.error_code))
-
+        if (schet==1):
+            print("CLOSE")
+            wait(100)
+        if (schet ==2):
+            print("OPEN")
+            wait(100) 
+            
     ## This is main program:
     def Position_control(self):
         """ Control the robot"""
