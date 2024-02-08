@@ -13,7 +13,7 @@ import actionlib
 class GripperPosControl:
     def __init__(self):
       
-        rospy.init_node("gripper") #ur3_joints
+        #rospy.init_node("robotiq_2f_action_server") #ur3_joints
         action_name = rospy.get_param('~action_name', 'command_robotiq_action')
         self.robotiq_client = actionlib.SimpleActionClient(action_name, CommandRobotiqGripper) #CommandRobotiqGripperAction
       
@@ -24,7 +24,7 @@ class GripperPosControl:
         ## ROS Subscriber Topic
         # Subscribe to the ar_pose_marker topic to get the image width and height
 
-        self.ur_sub_gripper = rospy.Subscriber('gripper',RobotiqGripperCommand, self.callback_gripper) #CommandRobotiqGripperGoal
+        self.ur_sub_gripper = rospy.Subscriber('robotiq_2f_action_server',RobotiqGripperCommand, self.callback_gripper) #CommandRobotiqGripperGoal
         
         ## ROS parameters
         self.rate = rospy.Rate(1) # Hz
