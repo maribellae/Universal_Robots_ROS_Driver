@@ -17,7 +17,8 @@ def main():
         'ur3_moveit': RosService('ur3_moveit', MoverService),
         'pose_estimation_srv': RosService('pose_estimation_service', PoseEstimationService),
         'pose_ove6d_estimation_service' :  RosService('pose_ove6d_estimation_service', PoseEstimationServiceOVE6D),
-        'ur3_joints': RosSubscriber('ur3_joints', UR3MoveItJoints, tcp_server)
+        'ur3_joints': RosSubscriber('ur3_joints', UR3MoveItJoints, tcp_server),
+        'gripper': RosPublisher('gripper', RobotiqGripperCommand, tcp_server)
     })
 
     rospy.spin()
