@@ -5,21 +5,35 @@ using UnityEngine;
 using UnityEngine.UI;
 using Unity.Robotics.ROSTCPConnector;
 using Unity.Robotics.ROSTCPConnector.ROSGeometry;
-using RosMessageTypes.Ur3Moveit;    
+using RosMessageTypes.Ur3Moveit;
+using RosMessageTypes.MSI;
 
 using Quaternion = UnityEngine.Quaternion;
 using Transform = UnityEngine.Transform;
 using Vector3 = UnityEngine.Vector3;
 
-public class TrajectoryPlanner : MonoBehaviour
+
+using System.Net;
+using System.Net.Sockets;
+using System;
+
+
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+public class TrajectoryPlanner : MonoBehaviour 
 {
     // ROS Connector
     private ROSConnection ros;
 
     // Hardcoded variables 
     private int numRobotJoints = 6;
-    private readonly float jointAssignmentWait = 5.06f; // 0.06f;
-    private readonly float poseAssignmentWait = 5.5f; //0.5f;
+    private readonly float jointAssignmentWait = 2.06f; // 0.06f;
+    private readonly float poseAssignmentWait = 2.5f; //0.5f;
     private readonly float gripperAngle = 14f;
     // Offsets to ensure gripper is above grasp points
     private readonly Vector3 pickPoseOffset = new Vector3(0, 0.255f, 0);
@@ -29,14 +43,10 @@ public class TrajectoryPlanner : MonoBehaviour
     // Orientation is hardcoded for this example so the gripper is always directly above the placement object
     private readonly Quaternion pickOrientation = new Quaternion(-0.5f, -0.5f, 0.5f, -0.5f);
 
-    // Variables required for ROS communication
 
-    //public string rosJointPublishTopicName = "sim_real_pnp";
-    //public string rosRobotCommandsTopicName = "niryo_one/commander/robot_action/goal";
-
-    public string rosServiceName = "ur3_moveit"; //"ur_robot_driver";        //"ur3_moveit";
-    
-    
+    public string rosServiceName = "ur3_moveit";
+    public string m_TopicName = "ur3_joints";
+    public string GripperTopic = "gripper";
     private const int isBigEndian = 0;
     private const int step = 4;
 
@@ -71,6 +81,64 @@ public class TrajectoryPlanner : MonoBehaviour
         PostPlace
     };
 
+
+    static Socket listener;
+    private CancellationTokenSource source;
+    public ManualResetEvent allDone;
+    public Renderer objectRenderer;
+    private Color matColor;
+
+    public static readonly int PORT = 1755;
+    public static readonly int WAITTIME = 1;
+
+
+    private Socket client;
+    [SerializeField]
+    private float[] dataOut, dataIn; //debugging
+
+    /// <summary>
+    /// Helper function for sending and receiving.
+    /// </summary>
+    /// <param name="dataOut">Data to send</param>
+    /// <returns></returns>
+    /*protected float[] ServerRequest(float[] dataOut)
+    {
+        //print("request");
+        this.dataOut = dataOut; //debugging
+        this.dataIn = SendAndReceive(dataOut); //debugging
+        return this.dataIn;
+    }
+    private float[] SendAndReceive(float[] dataOut)
+    {
+        //initialize socket
+        float[] floatsReceived;
+        client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        client.Connect(ip, port);
+        
+        if (!client.Connected)
+        {
+            Debug.LogError("Connection Failed");
+            return null;
+        }
+        Debug.Log("connected");
+        //convert floats to bytes, send to port
+        var byteArray = new byte[dataOut.Length * 4];
+        Buffer.BlockCopy(dataOut, 0, byteArray, 0, byteArray.Length);
+        client.Send(byteArray);
+
+        //allocate and receive bytes
+        byte[] bytes = new byte[4000];
+        int idxUsedBytes = client.Receive(bytes);
+        //print(idxUsedBytes + " new bytes received.");
+
+        //convert bytes to floats
+        floatsReceived = new float[idxUsedBytes / 4];
+        Buffer.BlockCopy(bytes, 0, floatsReceived, 0, idxUsedBytes);
+
+        client.Close();
+        return floatsReceived;
+    }
+    */
     /// <summary>
     ///     Opens and closes the attached gripper tool based on a gripping angle.
     /// </summary>
@@ -111,22 +179,129 @@ public class TrajectoryPlanner : MonoBehaviour
     /// </summary>
     public void PoseEstimation()
     {
-        Debug.Log("Capturing screenshot...");
+        Debug.Log("Capturing image ...");
 
         InitializeButton.interactable = false;
         RandomizeButton.interactable = false;
         ServiceButton.interactable = false;
-        ActualPos.text = target.transform.position.ToString();
-        ActualRot.text = target.transform.eulerAngles.ToString();
-        EstimatedPos.text = "-";
-        EstimatedRot.text = "-";
 
-        // Capture the screenshot and pass it to the pose estimation service
-        byte[] rawImageData = CaptureScreenshot();
-        InvokePoseEstimationService(rawImageData);
+        EstimatedPos.text = "-";
+
+        EstimatedRot.text = "-";
+        float[] obj_id = new float[2];
+        //InvokePoseEstimationServiceOve6D(obj_id);
+        source = new CancellationTokenSource();
+        allDone = new ManualResetEvent(false);
+        Task.Run(() => ListenEvents(source.Token));
+        //var estimatedRotation = Camera.main.transform.rotation * response.estimated_pose.orientation.From<RUF>();
+        //Vector3 estimatedPosition = new Vector3(float.Parse("-0.37", CultureInfo.InvariantCulture.NumberFormat), float.Parse("0.8", CultureInfo.InvariantCulture.NumberFormat), float.Parse("0.18", CultureInfo.InvariantCulture.NumberFormat));
+        //PublishJoints(estimatedPosition, estimatedRotation);
+
     }
 
-    private IEnumerator MoveToInitialPosition()
+    private void ListenEvents(CancellationToken token)
+    {
+
+
+        IPHostEntry ipHostInfo = Dns.GetHostEntry(Dns.GetHostName());
+        IPAddress ipAddress = ipHostInfo.AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork);
+        print(ipAddress.MapToIPv4().ToString());
+        IPEndPoint localEndPoint = new IPEndPoint(ipAddress, PORT);
+
+
+        listener = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+
+
+        try
+        {
+            listener.Bind(localEndPoint);
+            listener.Listen(10);
+
+
+            while (!token.IsCancellationRequested)
+            {
+                allDone.Reset();
+
+                print("Waiting for a connection... host :" + ipAddress.MapToIPv4().ToString() + " port : " + PORT);
+                listener.BeginAccept(new AsyncCallback(AcceptCallback), listener);
+
+                while (!token.IsCancellationRequested)
+                {
+                    if (allDone.WaitOne(WAITTIME))
+                    {
+                        break;
+                    }
+                }
+
+            }
+
+        }
+        catch (Exception e)
+        {
+            print(e.ToString());
+        }
+    }
+
+    void AcceptCallback(IAsyncResult ar)
+    {
+        Socket listener = (Socket)ar.AsyncState;
+        Socket handler = listener.EndAccept(ar);
+
+        allDone.Set();
+
+        StateObject state = new StateObject();
+        state.workSocket = handler;
+        handler.BeginReceive(state.buffer, 0, StateObject.BufferSize, 0, new AsyncCallback(ReadCallback), state);
+    }
+
+    void ReadCallback(IAsyncResult ar)
+    {
+        StateObject state = (StateObject)ar.AsyncState;
+        Socket handler = state.workSocket;
+
+        int read = handler.EndReceive(ar);
+
+        if (read > 0)
+        {
+            state.colorCode.Append(Encoding.ASCII.GetString(state.buffer, 0, read));
+            handler.BeginReceive(state.buffer, 0, StateObject.BufferSize, 0, new AsyncCallback(ReadCallback), state);
+        }
+        else
+        {
+            if (state.colorCode.Length > 1)
+            {
+                string content = state.colorCode.ToString();
+                print($"Read {content.Length} bytes from socket.\n Data : {content}");
+                SetColors(content);
+            }
+            handler.Close();
+        }
+    }
+
+    //Set color to the Material
+    private void SetColors(string data)
+    {
+        string[] colors = data.Split(',');
+        print(data);
+
+    }
+
+    private void OnDestroy()
+    {
+        source.Cancel();
+    }
+
+    public class StateObject
+    {
+        public Socket workSocket = null;
+        public const int BufferSize = 1024;
+        public byte[] buffer = new byte[BufferSize];
+        public StringBuilder colorCode = new StringBuilder();
+    }
+
+
+
+private IEnumerator MoveToInitialPosition()
     {
         bool isRotationFinished = false;
         while (!isRotationFinished)
@@ -161,6 +336,22 @@ public class TrajectoryPlanner : MonoBehaviour
             tempXDrive.target = rotationGoal;
             jointArticulationBodies[i].xDrive = tempXDrive;
         }
+
+        MoverServiceRequest request2 = new MoverServiceRequest();
+        request2.joints_input = CurrentJointConfig();
+
+        MoverServiceRequest letter = new MoverServiceRequest();
+        UR3MoveitJoints myjoints = new UR3MoveitJoints();
+        myjoints = request2.joints_input;
+
+
+        myjoints.joint_02 = myjoints.joint_02 - 1.5708f;
+
+        letter.joints_input = myjoints;
+
+
+        ros.Send("ur3_joints", letter);
+
         return isRotationFinished;
     }
 
@@ -172,23 +363,56 @@ public class TrajectoryPlanner : MonoBehaviour
     ///     PoseEstimationServiceResponse.
     /// </summary>
     /// <param name="imageData"></param>
-    private void InvokePoseEstimationService(byte[] imageData)
-    {
-        uint imageHeight = (uint)renderTexture.height;
-        uint imageWidth = (uint)renderTexture.width;
 
-        RosMessageTypes.Sensor.Image rosImage = new RosMessageTypes.Sensor.Image(new RosMessageTypes.Std.Header(), imageWidth, imageHeight, "RGBA", isBigEndian, step, imageData);
-        PoseEstimationServiceRequest poseServiceRequest = new PoseEstimationServiceRequest(rosImage);
-        ros.SendServiceMessage<PoseEstimationServiceResponse>("pose_estimation_srv", poseServiceRequest, PoseEstimationCallback);
+    /*private void InvokePoseEstimationServiceOve6D(float[] obj_id)
+
+    {
+
+        float[] prediction = ServerRequest(obj_id);
+        Vector3 estimatedPosition = new Vector3(prediction[9], prediction[10], prediction[11]);
+        var rotationMatrix = new Matrix4x4();
+        int idx = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                idx += 1;
+                rotationMatrix[i, j] = prediction[idx];
+            }
+        }
+        rotationMatrix[3, 3] = 1f;
+
+        Quaternion estimatedRotation = Quaternion.LookRotation(rotationMatrix.GetColumn(2), rotationMatrix.GetColumn(1));
+
+
+
+        // Quaternion estimatedRotation = new Quaternion(prediction[0], prediction[1], prediction[2], prediction[3]);
+        PublishJoints(estimatedPosition, estimatedRotation);
+        EstimatedPos.text = estimatedPosition.ToString();
+        EstimatedRot.text = estimatedRotation.eulerAngles.ToString();
+        //RosMessageTypes.MSI.Int32 poseServiceRequest = new RosMessageTypes.MSI.Int32(obj_id);
+
+        //ros.SendServiceMessage<PoseEstimationServiceResponse>("pose_ove6d_estimation_service", poseServiceRequest, PoseEstimationCallbackOve6D);
+    }*/
+
+
+    private void InvokeGripper(float pos, float speed, float force)
+
+    {
+        //RosMessageTypes.MSI.Int32 ros_obj_id = new RosMessageTypes.MSI.Int32(obj_id);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////RosMessageTypes.MSI.RobotiqGripperCommand GripperRequest = new RosMessageTypes.MSI.RobotiqGripperCommand(false, 0, false, pos,speed,force);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////ros.Send("gripper", GripperRequest);
     }
 
-    void PoseEstimationCallback(PoseEstimationServiceResponse response)
+    /*void PoseEstimationCallbackOve6D(PoseEstimationServiceResponse response)
     {
         if (response != null)
         {
             // The position output by the model is the position of the cube relative to the camera so we need to extract its global position 
-            var estimatedPosition = Camera.main.transform.TransformPoint(response.estimated_pose.position.From<RUF>());
-            var estimatedRotation = Camera.main.transform.rotation * response.estimated_pose.orientation.From<RUF>();
+            var estimatedPosition = response.estimated_pose.position.From<RUF>();
+            var estimatedRotation = response.estimated_pose.orientation.From<RUF>();
 
             PublishJoints(estimatedPosition, estimatedRotation);
 
@@ -201,26 +425,7 @@ public class TrajectoryPlanner : MonoBehaviour
             RandomizeButton.interactable = true;
         }
     }
-
-    /// <summary>
-    ///     Capture the main camera's render texture and convert to bytes.
-    /// </summary>
-    /// <returns>imageBytes</returns>
-    private byte[] CaptureScreenshot()
-    {
-        Camera.main.targetTexture = renderTexture;
-        RenderTexture currentRT = RenderTexture.active;
-        RenderTexture.active = renderTexture;
-        Camera.main.Render();
-        Texture2D mainCameraTexture = new Texture2D(renderTexture.width, renderTexture.height);
-        mainCameraTexture.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
-        mainCameraTexture.Apply();
-        RenderTexture.active = currentRT;
-        // Get the raw byte info from the screenshot
-        byte[] imageBytes = mainCameraTexture.GetRawTextureData();
-        Camera.main.targetTexture = null;
-        return imageBytes;
-    }
+    */
 
     /// <summary>
     ///     Get the current values of the robot's joint angles.
@@ -260,6 +465,8 @@ public class TrajectoryPlanner : MonoBehaviour
         };
         ////////////////////////////////////////////////////////////////////////////////////////////ros.Send("ur3_joints", request);
         ros.SendServiceMessage<MoverServiceResponse>(rosServiceName, request, TrajectoryResponse);
+        request.joints_input.joint_01 -= 1.5708f;
+        ros.Send(m_TopicName, request.joints_input);
     }
 
     void TrajectoryResponse(MoverServiceResponse response)
@@ -306,18 +513,18 @@ public class TrajectoryPlanner : MonoBehaviour
                     float[] result = jointPositions.Select(r => (float)r * Mathf.Rad2Deg).ToArray();
 
 
-                    MoverServiceRequest letter = new MoverServiceRequest();
+                    MoverServiceRequest letter1 = new MoverServiceRequest();
                     UR3MoveitJoints myjoints = new UR3MoveitJoints();
 
                     myjoints.joint_00 = result[0];
                     myjoints.joint_01 = result[1];
-                    myjoints.joint_02 = result[2];
+                    myjoints.joint_02 = result[2] - 1.5708f;
                     myjoints.joint_03 = result[3];
                     myjoints.joint_04 = result[4];
                     myjoints.joint_05 = result[5];
-                    letter.joints_input = myjoints
-                    ros.Send("ur3_joints", letter);
-
+                    letter1.joints_input = myjoints;
+                    ros.Send("ur3_joints", letter1);
+                    yield return new WaitForSeconds(jointAssignmentWait);
 
 
                     // Set the joint values for every joint
@@ -335,12 +542,19 @@ public class TrajectoryPlanner : MonoBehaviour
                 if (poseIndex == (int)Poses.Grasp)
                 {
                     StartCoroutine(IterateToGrip(true));
+
+                    ///////////////////////////////////////////////InvokeGripper(0.0f, 0.0f, 0.0f);
+
+
                     yield return new WaitForSeconds(jointAssignmentWait);
                 }
                 else if (poseIndex == (int)Poses.Place)
                 {
                     yield return new WaitForSeconds(poseAssignmentWait);
                     // Open the gripper to place the target cube
+
+                    /////////////////////////////////////////////////////InvokeGripper(1.0f, 0.0f, 0.0f);
+
                     StartCoroutine(IterateToGrip(false));
                 }
                 // Wait for the robot to achieve the final pose from joint assignment
